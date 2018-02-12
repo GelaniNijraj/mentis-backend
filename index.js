@@ -1,10 +1,12 @@
 import Express from 'express';
 import mongoose from 'mongoose';
 import bodyParser from 'body-parser';
+import fs from 'fs';
 
 import VerifyToken from './src/middlewares/VerifyToken';
 
 import config from './config';
+import User from './src/models/User';
 import userRoutes from './src/routes/user';
 import repoRoutes from './src/routes/repo';
 
@@ -17,11 +19,26 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // loading routes
 app.get('/api', (req, res) => res.send('Mentis API'));
+
+// authenticating remote cloning
+app.get('/auth_git', (req, res) => {
+	if(req.headers.authorization != undefined){
+		var authHeader = req.headers.authorization;
+		authHeader = authHeader.substr(authHeader.search(' ') + 1, authHeader.length); // stripping 'Basic '
+		var decoded = Buffer.from(authHeader, 'base64').toString().split(':');
+		var username = decoded[0], password = decoded[1];
+		User.matches(username, password, (matches) => res.status(matches ? 200 : 401).json({success: false}));
+	}else{
+		res.status(401).json({success: false});
+	}
+});
 app.use('/api/user', userRoutes);
 app.use('/api/repo', repoRoutes);
 
 //setting config vars
-app.set('jsonsecret', config.secret);
+app.set('jsonsecret', config.apisecret);
+app.set('storagedir', config.storagedir);
+app.set('httproot', config.httproot);
 
 // connecting to the database
 mongoose.connect('mongodb://127.0.0.1/mentis');

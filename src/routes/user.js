@@ -57,7 +57,6 @@ userRoutes.post('/authenticate', (req, res) => {
 
 // test
 userRoutes.post('/authonly', VerifyToken, (req, res) => {
-	res.json(req.decoded);
 });
 
 export default userRoutes;
