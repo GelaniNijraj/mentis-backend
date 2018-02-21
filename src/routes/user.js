@@ -13,7 +13,8 @@ var userRoutes = require('express').Router();
 userRoutes.post('/register', (req, res) => {
 	var user = new User({
 		name: req.body.name,
-		username: req.body.username
+		username: req.body.username,
+		email: req.body.email
 	});
 	bcrypt.hash(req.body.password, 10, function(err, hash){
 		user.password = hash;
@@ -33,7 +34,10 @@ userRoutes.post('/authenticate', (req, res) => {
 		}, (err, user) => {
 			if(err) throw err;
 			if(!user){
-				res.json({success: false, message: 'Username/password does not match'});
+				res.json({
+					success: false, 
+					message: 'username/password does not match'
+				});
 			}else{
 				bcrypt.compare(req.body.password, user.password, (err, matches) => {
 					if(matches){
@@ -47,11 +51,19 @@ userRoutes.post('/authenticate', (req, res) => {
 						}
 						res.json(response);
 					}else{
-						res.json({success: false, message: 'Username/password does not match'});
+						res.json({
+							success: false, 
+							message: 'Username/password does not match'
+						});
 					}
 				});
 			}
 		});
+	}else{
+		res.json({
+			success: false,
+			message: 'not enough parameters'
+		})
 	}
 });
 
