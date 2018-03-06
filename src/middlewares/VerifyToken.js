@@ -8,7 +8,7 @@ function VerifyToken(req, res, next){
 			if(err){
 				res.json({
 					success: false,
-					message: "Invalid token provided"
+					message: "invalid token provided"
 				});
 			}else{
 				req.decoded = decoded;
@@ -18,7 +18,7 @@ function VerifyToken(req, res, next){
 	}else{
 		res.status(403).send({
 			success: false,
-			message: "Token not provided"
+			message: "invalid token provided"
 		});
 	}
 }

@@ -30,6 +30,12 @@ app.get('/api', (req, res) => res.send('Mentis API'));
 // authenticating remote cloning
 app.get('/auth_git', (req, res) => {
 	// TODO: check if repo is public. If yes, then skip auth.
+	console.log("authenticating");
+	console.log(req.headers);
+	// console.log(req);
+	// res.status(200).json({success: true});
+
+		// res.status(401).json({success: false});
 	if(req.headers.authorization != undefined){
 		var authHeader = req.headers.authorization;
 		authHeader = authHeader.substr(authHeader.search(' ') + 1, authHeader.length); // stripping 'Basic '

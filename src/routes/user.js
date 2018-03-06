@@ -1,5 +1,7 @@
 import Express from 'express';
+import path from 'path';
 import bcrypt from 'bcrypt';
+import fs from 'fs';
 import validator from 'validator';
 import jwt from 'jsonwebtoken';
 
@@ -7,22 +9,26 @@ import VerifyToken from './../middlewares/VerifyToken';
 
 import User from './../models/User';
 
-var userRoutes = require('express').Router();
+let userRoutes = require('express').Router();
 
 // Registration
 userRoutes.post('/register', (req, res) => {
-	var user = new User({
+	let user = new User({
 		name: req.body.name,
 		username: req.body.username,
-		email: req.body.email
+		email: req.body.email,
+		password: req.body.password
 	});
-	bcrypt.hash(req.body.password, 10, function(err, hash){
-		user.password = hash;
-		user.validate(function(err, out){
-			if(err) throw(err);
-			user.save();
-			res.json({success: true});
-		});
+	user.register((err) => {
+		if(err){
+			res.json({success: false, message: err.message});
+		}else{
+			let userDir = path.join(req.app.get('storagedir'), user.username);
+			fs.mkdir(userDir, (err) => {
+				if(!err)
+					res.json({success: true});
+			});
+		}
 	});
 });
 
@@ -41,19 +47,18 @@ userRoutes.post('/authenticate', (req, res) => {
 			}else{
 				bcrypt.compare(req.body.password, user.password, (err, matches) => {
 					if(matches){
-						var payload = {success: true, userId: user._id};
-						var token = jwt.sign(payload, req.app.get('jsonsecret'), {
-							expiresIn: 1440
+						let payload = {success: true, userId: user._id};
+						let token = jwt.sign(payload, req.app.get('jsonsecret'), {
+							expiresIn: 24 * 60 * 60
 						});
-						var response = {
+						res.json({
 							success: true,
 							token: token
-						}
-						res.json(response);
+						});
 					}else{
 						res.json({
 							success: false, 
-							message: 'Username/password does not match'
+							message: 'username/password does not match'
 						});
 					}
 				});
