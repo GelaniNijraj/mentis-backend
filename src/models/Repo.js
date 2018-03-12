@@ -4,9 +4,11 @@ import walk from 'fs-walk';
 import mongoose from 'mongoose';
 import validator from 'validator';
 import jwt from 'jsonwebtoken';
+import rimraf from 'rimraf';
 
 import config from './../../config';
 import User from './User';
+import Issue from './Issue';
 
 var Schema = mongoose.Schema;
 var repoSchema = new Schema({
@@ -15,7 +17,11 @@ var repoSchema = new Schema({
 	description: String,
 	location: String,
 	dir: String,
-	public: Boolean
+	public: Boolean,
+	issuesEnabled: {type: Boolean, default: true},
+	issues: [{type: Schema.Types.ObjectId, ref: 'Issue'}],
+	issueLabels: [{type: Schema.Types.ObjectId, ref: 'IssueLabel'}],
+	permissions: [{type: Schema.Types.ObjectId, ref: 'Permission'}],
 });
 
 /*
@@ -43,13 +49,13 @@ repoSchema.methods.create = function(callback){
 								walk.walk(repoDir, (baseDir, file, stat, next) => {
 									fs.chmod(path.join(baseDir, file), '777', next);
 								}, (err) => {
-									console.log(err);
 									if(err){
 										callback(err);
 									}else{
 										fs.chmodSync(repoDir, '777');
-										this.save();
-										callback(false);
+										this.save((err) => {
+											callback(false);
+										});
 									}
 								});
 							});
@@ -114,20 +120,16 @@ repoSchema.methods.getCommitsCount = function(callback){
 }
 
 repoSchema.methods.hasPermission = function(token, callback){
-	if(this.public)
-		callback(true);
-	else{
-		jwt.verify(token, config.apisecret, (err, decoded) => {
-			if(err){
-				callback(false);
-			}else if(decoded.userId == this.owner){
-				callback(true);
-			}else{
-				// TODO: check other permissions
-				callback(false);
-			}
-		});
-	}
+	jwt.verify(token, config.apisecret, (err, decoded) => {
+		if(err){
+			callback(false);
+		}else if(this.public || decoded.userId == this.owner){
+			callback(true, decoded.userId);
+		}else{
+			// TODO: check other permissions
+			callback(false);
+		}
+	});
 }
 
 // callback(err)
@@ -136,13 +138,42 @@ repoSchema.methods.rename = function(newname, callback){
 	repo.save();
 }
 
-repoSchema.methods.getContent = function(path, callback){
-	
-}
-
 // callback(err)
 repoSchema.methods.delete = function(callback){
-
+	rimraf(path.join(config.storagedir, this.dir), () => {
+		User.findOne({
+			_id: this.owner
+		}, (err, user) => {
+			if(err){
+				callback(err);
+			}else{
+				// removing ref from user.repos
+				user.repos.pull(this._id);
+				user.save((err) => {
+					if(err){
+						callback(err);
+					}else{
+						// removing issues
+						Issue.find({
+							repo: this._id
+						}).remove((err) => {
+							if(err){
+								callback(err);
+							}else{
+								this.remove((err) => {
+									this.save();
+									if(err)
+										callback(err);
+									else
+										callback(null);
+								});
+							}
+						})
+					}
+				});
+			}
+		})
+	});
 }
 
 repoSchema.statics.findByName = function(username, reponame, callback){
@@ -164,6 +195,24 @@ repoSchema.statics.findByName = function(username, reponame, callback){
 			callback(new Error('repo not found'));
 		}
 	});
+}
+
+repoSchema.statics.findExact = function(user, repo, populate){
+	if(populate == undefined)
+		populate = {};
+	return User
+		.findOne({
+			username: user
+		})
+		.populate({
+			path: 'repos',
+			match: {name: repo},
+			populate: populate
+		});
+}
+
+repoSchema.statics.existsCheck = function(user){
+	return user != undefined && user.repos.length != 0;
 }
 
 var Repo = mongoose.model('Repo', repoSchema);

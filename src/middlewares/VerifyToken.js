@@ -2,7 +2,9 @@ import jwt from 'jsonwebtoken';
 import config from './../../config.js';
 
 function VerifyToken(req, res, next){
-	var token = req.body.token;
+	let token = req.body.token;
+	if(token == undefined)
+		token = req.query.token;
 	if(token){
 		jwt.verify(token, req.app.get('jsonsecret'), (err, decoded) => {
 			if(err){

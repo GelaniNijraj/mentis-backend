@@ -29,17 +29,20 @@ repoRoutes.post('/create', VerifyToken, (req, res) => {
 				dir: repoDir,
 				description: req.body.description,
 				location: repoURL,
-				public: req.body.public == "true"
+				public: req.body.public
 			});
 			repo.create((err) => {
-				if(!err)
+				if(!err){
+					user.repos.push(repo._id);
+					user.save();
 					res.json({
 						success: true, 
 						message: 'repo created successfully', 
 						data: {url: repo.location}
 					});
-				else
+				}else{
 					res.json({success: false, message: err.message});
+				}
 			});
 		});	
 	}
@@ -54,7 +57,7 @@ repoRoutes.get('/files', (req, res) => {
 				owner: mongoose.Types.ObjectId(user._id),
 				name: req.query.reponame
 			}, (err, repo) => {
-				if(!err){
+				if(!err && repo != null){
 					repo.hasPermission(req.query.token, (has) => {
 						if(!err && has){
 							repo.getFiles(req.query.root, (err, files) => {
@@ -114,6 +117,70 @@ repoRoutes.post('/all', VerifyToken, (req, res) => {
 		if(repos)
 			res.json({success: true, data: repos});
 	});
+});
+
+
+repoRoutes.get('/:user/repos/all', (req, res) => {
+	User.getId(req.query.token, (id) => {
+		User
+			.findOne({
+				username: req.params.user
+			})
+			.populate('repos')
+			.exec((err, user) => {
+				if(user != undefined){
+					if(id == user._id.toString())
+						res.json({success: true, repos: user.repos});
+					else
+						res.json({success: true, repos: user.repos.filter(r => r.public)});
+				}else{
+					res.status(404).json({success: false, message: 'user/repo not found'})
+				}
+			});
+	})
+});
+
+repoRoutes.get('/:user/repos/count', (req, res) => {
+	User
+		.findOne({
+			username: req.params.user
+		})
+		.exec((err, user) => {
+			if(user != undefined){
+				res.json({success: true, count: user.repos.length});
+			}else{
+				res.status(404).json({success: false, message: 'user/repo not found'})
+			}
+		});
+});
+
+repoRoutes.post('/delete', VerifyToken, (req, res) => {
+	User
+		.findOne({
+			username: req.body.owner
+		})
+		.populate({
+			path: 'repos',
+			match: {name: req.body.repo},
+			populate: {path: 'issues'}
+		})
+		.exec((err, user) => {
+			if(user != undefined && user.repos.length > 0){
+				if(user._id == req.decoded.userId){
+					let repo = user.repos[0];
+					repo.delete((err) => {
+						if(!err)
+							res.json({success: true});
+						else
+							res.json({success: false});
+					});
+				}else{
+					res.status(401).json({success: false});
+				}
+			}else{
+				res.status(404).json({success: false, message: 'user/repo not found'})
+			}
+		});
 });
 
 

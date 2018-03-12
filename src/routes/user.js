@@ -14,7 +14,6 @@ let userRoutes = require('express').Router();
 // Registration
 userRoutes.post('/register', (req, res) => {
 	let user = new User({
-		name: req.body.name,
 		username: req.body.username,
 		email: req.body.email,
 		password: req.body.password

@@ -1,15 +1,13 @@
 import mongoose from 'mongoose';
 import validator from 'validator';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import fs from 'fs';
+
+import config from './../../config';
 
 var Schema = mongoose.Schema;
 var userSchema = new Schema({
-	name: {
-		type: String,
-		required: [true, 'name is required'],
-		minlength: 1
-	},
 	email: {
 		type: String,
 		required: [true, 'email is required']
@@ -23,16 +21,10 @@ var userSchema = new Schema({
 		type: String,
 		required: [true, 'password is required'],
 		minlength: [8, 'minimum password length is 8 characters']
-	}
+	},
+	repos: [{type: Schema.Types.ObjectId, ref: 'Repo'}]
 });
 
-/*
- * Verifies if username and password matches.
- * username: String - username
- * password: String - passsword
- * callback: Function
- *  - matches: Boolean - whether username password matches or not
- */
 userSchema.methods.register = function(cb){
 	User.find()
 		.or([{username: this.username}, {email: this.email}])
@@ -66,15 +58,15 @@ userSchema.statics.matches = function(username, password, callback){
 	});
 }
 
-userSchema.path('username').validate({
-	isAsync: true,
-	validator: (value, cb) => {
-		User.findOne({
-			username: value
-		}, (err, user) => cb(user == undefined));
-	},
-	message: 'username already taken'
-});
+userSchema.statics.getId = function(token, callback){
+	jwt.verify(token, config.apisecret, (err, decoded) => {
+		if(err){
+			callback(null);
+		}else{
+			callback(decoded.userId);
+		}
+	});
+}
 
 var User = mongoose.model('User', userSchema);
 

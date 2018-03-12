@@ -9,6 +9,7 @@ import config from './config';
 import User from './src/models/User';
 import userRoutes from './src/routes/user';
 import repoRoutes from './src/routes/repo';
+import issueRoutes from './src/routes/issue';
 
 var app = new Express();
 var router = require('express').Router();
@@ -48,6 +49,7 @@ app.get('/auth_git', (req, res) => {
 });
 app.use('/api/user', userRoutes);
 app.use('/api/repo', repoRoutes);
+app.use('/api', issueRoutes);
 
 //setting config vars
 app.set('jsonsecret', config.apisecret);
