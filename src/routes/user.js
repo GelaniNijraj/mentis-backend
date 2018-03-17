@@ -16,6 +16,7 @@ userRoutes.post('/register', (req, res) => {
 	let user = new User({
 		username: req.body.username,
 		email: req.body.email,
+		registeredOn: new Date(),
 		password: req.body.password
 	});
 	user.register((err) => {
@@ -69,6 +70,43 @@ userRoutes.post('/authenticate', (req, res) => {
 			message: 'not enough parameters'
 		})
 	}
+});
+
+userRoutes.get('/:user/stars', (req, res) => {
+	User
+		.findOne({
+			username: req.params.user
+		})
+		.populate({
+			path: 'stars',
+			select: '-_id name description public',
+			populate: {
+				path: 'owner',
+				select: '-_id username'
+			}
+		})
+		.exec((err, user) => {
+			if(!err){
+				res.json({success: true, stars: user.stars});
+			}else{
+				res.status(404).json({success: false});
+			}
+		});
+});
+
+
+userRoutes.get('/:user/stars/count', (req, res) => {
+	User
+		.findOne({
+			username: req.params.user
+		})
+		.exec((err, user) => {
+			if(!err){
+				res.json({success: true, count: user.stars.length});
+			}else{
+				res.status(404).json({success: false});
+			}
+		});
 });
 
 // test

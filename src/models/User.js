@@ -12,6 +12,7 @@ var userSchema = new Schema({
 		type: String,
 		required: [true, 'email is required']
 	},
+	registeredOn: {type: Date, default: new Date()},
 	username: {
 		type: String,
 		required: [true, 'username is required'],
@@ -22,7 +23,8 @@ var userSchema = new Schema({
 		required: [true, 'password is required'],
 		minlength: [8, 'minimum password length is 8 characters']
 	},
-	repos: [{type: Schema.Types.ObjectId, ref: 'Repo'}]
+	repos: [{type: Schema.Types.ObjectId, ref: 'Repo'}],
+	stars: [{type: Schema.Types.ObjectId, ref: 'Repo'}]
 });
 
 userSchema.methods.register = function(cb){

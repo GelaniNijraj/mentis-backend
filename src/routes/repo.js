@@ -27,6 +27,7 @@ repoRoutes.post('/create', VerifyToken, (req, res) => {
 				name: repoName,
 				owner: userId,
 				dir: repoDir,
+				createdOn: new Date(),
 				description: req.body.description,
 				location: repoURL,
 				public: req.body.public
@@ -59,7 +60,7 @@ repoRoutes.get('/files', (req, res) => {
 			}, (err, repo) => {
 				if(!err && repo != null){
 					repo.hasPermission(req.query.token, (has) => {
-						if(!err && has){
+						if(has){
 							repo.getFiles(req.query.root, (err, files) => {
 								if(!err)
 									res.json({success: true, files: files});
@@ -80,43 +81,193 @@ repoRoutes.get('/files', (req, res) => {
 	});
 });
 
-repoRoutes.get('/info', (req, res) => {
-	let username = req.query.username;
-	let reponame = req.query.reponame;
-	Repo.findByName(username, reponame, (err, repo) => {
-		if(err){
-			res.json({success: false, message: err.message});
-		}else{
-			repo.hasPermission(req.query.token, (has) => {
-				if(has){
-					repo.getCommitsCount((err, commits) => {
-						let out = {
+repoRoutes.get('/:user/:repo/files/content', (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(Repo.existsCheck(user)){
+				let repo = user.repos[0];
+				repo.hasPermission(req.query.token, (has) => {
+					if(has){
+						let branch = req.query.branch == undefined ? 'master' : req.query.branch;
+						repo.getFileContent(branch, req.query.file, (err, content) => {
+							if(!err)
+								res.json({success: true, content: content});
+							else
+								res.json({success: false});
+						});
+					}else{
+						res.status(401).json({success: false});
+					}
+				})
+			}
+		});
+});
+
+repoRoutes.get('/repos/search/:query', (req, res) => {
+	Repo
+		.find({
+			name: {$regex: req.params.query, $options: 'i'},
+			public: true
+		})
+		.exec((err, repos) => {
+			res.json({success: true, repos: repos});
+		});
+});
+
+repoRoutes.get('/:user/:repo/info', (req, res) => {
+	let username = req.params.user;
+	let reponame = req.params.repo;
+	Repo
+		.findExact(username, reponame)
+		.exec((err, user) => {
+			if(Repo.existsCheck(user)){
+				let repo = user.repos[0];
+				repo.hasPermission(req.query.token, (has, userId) => {
+					if(has){
+						res.json({
+							success: true, 
+							description: repo.description, 
+							url: repo.location, 
 							name: repo.name,
-							url: repo.location,
-							description: repo.description,
-							stars: repo.stars,
-							commits: commits,
-							issues: repo.issues,
-							branches: repo.branches
-						};
-						res.json({success: true, data: out});
-					});
-				}else{
-					res.status(401).json({success: false, message: 'permission denied'});
-				}
-			});
-		}
-	});
+							starred: repo.starredBy.some(e => e.toString() == userId),
+							isOwner: repo.owner.toString() == userId
+						});
+					}else{
+						res.status(401).message({success: false});
+					}
+				});
+			}else{
+				res.status(404).json({success: false});
+			}
+		});
+});
+
+repoRoutes.get('/:user/:repo/commits/count', (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(Repo.existsCheck(user)){
+				let repo = user.repos[0];
+				repo.hasPermission(req.query.token, (has) => {
+					if(has){
+						repo.getCommitsCount((err, count) => {
+							if(!err)
+								res.json({success: true, count: count});
+							else
+								res.json({success: false});
+						});
+					}else{
+						res.status(401).json({success: false});
+					}
+				});
+			}else{
+				res.status(404).json({success: false});
+			}
+		});
 });
 
 repoRoutes.post('/all', VerifyToken, (req, res) => {
 	var userId = req.decoded.userId;
-	Repo.find({
-		owner: userId
-	}, (err, repos) => {
-		if(repos)
-			res.json({success: true, data: repos});
-	});
+	Repo
+		.find({
+			owner: userId
+		})
+		.pupulate({
+			path: 'owner',
+			select: '-_id username'
+		})
+		.exec((err, repos) => {
+			console.log(repos);
+			if(repos)
+				res.json({success: true, data: repos});
+		});
+});
+
+repoRoutes.post('/:user/:repo/star', VerifyToken, (req, res) => {
+	var userId = req.decoded.userId;
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(Repo.existsCheck(user)){
+				let repo = user.repos[0];
+				let starred = repo.starredBy.some(e => e.toString() == req.decoded.userId);
+				if(!starred){
+					repo.starredBy.push(req.decoded.userId);
+					repo.save((err) => {
+						if(!err){
+							User.findOne({_id: req.decoded.userId}, (err, u) => {
+								if(!err){
+									u.stars.push(repo._id);
+									u.save((err) => {
+										if(!err){
+											res.json({success: true});
+										}else{
+											res.json({success: false});
+										}
+									});
+								}else{
+									res.json({success: false});
+								}
+							});
+						}else{
+							res.json({success: false});
+						}
+					})
+				}else{
+					res.json({success: false, message: 'already starred'});
+				}
+			}else{
+				res.status(404).json({success: false});
+			}
+		});
+});
+
+repoRoutes.get('/:user/:repo/stars/count', (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(Repo.existsCheck(user)){
+				let repo = user.repos[0];
+				res.json({success: true, count: repo.starredBy.length});
+			}else{
+				res.status(404).json({success: false});
+			}
+		});
+});
+
+repoRoutes.post('/:user/:repo/unstar', VerifyToken, (req, res) => {
+	var userId = req.decoded.userId;
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(Repo.existsCheck(user)){
+				let repo = user.repos[0];
+				repo.starredBy.pull(req.decoded.userId);
+				repo.save((err) => {
+					if(!err){
+						User.findOne({_id: req.decoded.userId}, (err, u) => {
+							if(!err){
+								u.stars.pull(repo._id);
+								u.save((err) => {
+									if(!err){
+										res.json({success: true});
+									}else{
+										res.json({success: false});
+									}
+								});
+							}else{
+								res.json({success: false});
+							}
+						});
+					}else{
+						res.json({success: false});
+					}
+				})
+			}else{
+				res.status(404).json({success: false});
+			}
+		});
 });
 
 
@@ -126,7 +277,13 @@ repoRoutes.get('/:user/repos/all', (req, res) => {
 			.findOne({
 				username: req.params.user
 			})
-			.populate('repos')
+			.populate({
+				path: 'repos',
+				populate: {
+					path: 'owner',
+					select: '-_id username'
+				}
+			})
 			.exec((err, user) => {
 				if(user != undefined){
 					if(id == user._id.toString())

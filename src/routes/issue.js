@@ -25,7 +25,8 @@ issueRoutes.post('/create', VerifyToken, (req, res) => {
 						repo: mongoose.Types.ObjectId(repo._id),
 						createdBy: mongoose.Types.ObjectId(req.decoded.userId),
 						title: req.body.title,
-						description: req.body.description
+						description: req.body.description,
+						postedOn: new Date()
 					});
 					issue.save((err, i, num) => {
 						repo.issues.push(issue._id);
@@ -57,7 +58,8 @@ issueRoutes.post('/:user/:repo/issues/create', VerifyToken, (req, res) => {
 						repo: mongoose.Types.ObjectId(repo._id),
 						createdBy: mongoose.Types.ObjectId(req.decoded.userId),
 						title: req.body.title,
-						description: req.body.description
+						description: req.body.description,
+						postedOn: new Date()
 					});
 					issue.save((err, i, num) => {
 						repo.issues.push(issue._id);
@@ -95,17 +97,36 @@ issueRoutes.get('/:user/:repo/issues/all', (req, res) => {
 				}, {
 					path: 'labels',
 					select: '-_id title'
-				}]
+				}],
+				select: '-_id id title postedOn open',
+				options: {sort: '-postedOn'}
 			}
 		})
 		.exec((err, user) => {
 			if(user != undefined && user.repos.length > 0){
 				let repo = user.repos[0];
 				repo.hasPermission(req.query.token, (has) => {
-					if(has)
-						res.json({success: true, issues: repo.issues});
-					else
+					if(has){
+						console.log(req.query.label);
+						if(req.query.label == 'undefined'){
+							res.json({success: true, issues: repo.issues});
+						}else{
+							console.log('here');
+							let filtered = repo.issues.filter(i => {
+								let matches = i.labels.some(j => {
+									console.log(j.title);
+									if(j.title == req.query.label)
+										return true;
+								});
+								console.log(matches);
+								if(matches)
+									return i;
+							});
+							res.json({success: true, issues: filtered});
+						}
+					}else{
 						res.status(401).json({success: false});
+					}
 				});
 			}else{
 				res.status(404).json({success: false, message: 'user/repo not found'})
@@ -114,7 +135,7 @@ issueRoutes.get('/:user/:repo/issues/all', (req, res) => {
 });
 
 
-issueRoutes.get('/:user/:repo/issues/count', VerifyToken, (req, res) => {
+issueRoutes.get('/:user/:repo/issues/count', (req, res) => {
 	console.log(req.params);
 	User
 		.findOne({
@@ -155,7 +176,7 @@ issueRoutes.get('/:user/:repo/issues/:id', (req, res) => {
 					select: '-_id username'
 				}, {
 					path: 'replies',
-					select: '-_id description',
+					select: '-_id description postedOn open',
 					populate: {
 						path: 'from',
 						select: '-_id username'
@@ -174,6 +195,70 @@ issueRoutes.get('/:user/:repo/issues/:id', (req, res) => {
 						res.json({success: true, issue: repo.issues[0], isOwner: repo.owner == id});
 					else
 						res.status(401).json({success: false});
+				});
+			}else{
+				res.status(404).json({success: false, message: 'user/repo not found'})
+			}
+		});
+});
+
+issueRoutes.post('/:user/:repo/issues/:id/close', (req, res) => {
+	User
+		.findOne({
+			username: req.params.user
+		})
+		.populate({
+			path: 'repos',
+			match: {name: req.params.repo},
+			populate: {
+				path: 'issues',
+				match: {id: req.params.id}
+			}
+		})
+		.exec((err, user) => {
+			if(user != undefined && user.repos.length > 0 && user.repos[0].issues.length > 0){
+				let repo = user.repos[0];
+				repo.hasPermission(req.query.token, (has, id) => {
+					let issue = repo.issues[0];
+					issue.open = false;
+					issue.save((err) => {
+						if(!err)
+							res.json({success: true});
+						else
+							res.json({success: false, message: err.message});
+					})
+				});
+			}else{
+				res.status(404).json({success: false, message: 'user/repo not found'})
+			}
+		});
+});
+
+issueRoutes.post('/:user/:repo/issues/:id/open', (req, res) => {
+	User
+		.findOne({
+			username: req.params.user
+		})
+		.populate({
+			path: 'repos',
+			match: {name: req.params.repo},
+			populate: {
+				path: 'issues',
+				match: {id: req.params.id}
+			}
+		})
+		.exec((err, user) => {
+			if(user != undefined && user.repos.length > 0 && user.repos[0].issues.length > 0){
+				let repo = user.repos[0];
+				repo.hasPermission(req.query.token, (has, id) => {
+					let issue = repo.issues[0];
+					issue.open = true;
+					issue.save((err) => {
+						if(!err)
+							res.json({success: true});
+						else
+							res.json({success: false, message: err.message});
+					})
 				});
 			}else{
 				res.status(404).json({success: false, message: 'user/repo not found'})
@@ -200,10 +285,11 @@ issueRoutes.post('/:user/:repo/issues/:id/reply', VerifyToken, (req, res) => {
 				let repo = user.repos[0];
 				let issue = repo.issues[0];
 				repo.hasPermission(req.body.token, (has) => {
-					if(has){
+					if(has && issue.open){
 						let reply = new IssueReply();
 						reply.issue = issue._id;
 						reply.from = req.decoded.userId;
+						reply.postedOn = new Date();
 						reply.description = req.body.description;
 						reply.save((err, i) => {
 							issue.replies.push(i._id);
@@ -219,7 +305,6 @@ issueRoutes.post('/:user/:repo/issues/:id/reply', VerifyToken, (req, res) => {
 					}
 				});
 			}else{
-				console.log(user.repos[0].issues);
 				res.status(404).json({success: false, message: 'user/repo not found'})
 			}
 		});
@@ -354,6 +439,33 @@ issueRoutes.post('/:user/:repo/issues/:id/labels/resign/:label', VerifyToken, (r
 		})
 });
 
+
+issueRoutes.get('/:user/:repo/issues/:id/labels/:label', VerifyToken, (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo, {
+			path: 'issues',
+			match: {id: req.params.id},
+		})
+		.exec((err, user) => {
+			if(Repo.existsCheck(user) && user.repos[0].issues.length > 0){
+				let repo = user.repos[0];
+				let issue = repo.issues[0];
+				IssueLabel.findOne({
+					repo: repo._id,
+					title: req.params.label
+				}, (err, label) => {
+					if(!err){
+						console.log(label);
+					}else{
+						res.json({success: false, message: 'label does not exist'});
+					}
+				});
+			}else{
+				res.status(404).json({success: false});
+			}
+		})
+});
+
 issueRoutes.get('/:user/:repo/issues/:id/labels', VerifyToken, (req, res) => {
 	Repo
 		.findExact(req.params.user, req.params.repo, {
@@ -376,7 +488,7 @@ issueRoutes.get('/:user/:repo/issues/:id/labels', VerifyToken, (req, res) => {
 		});
 });
 
-issueRoutes.post('/:user/:repo/issues/labels/delete', VerifyToken, (req, res) => {
+issueRoutes.post('/:user/:repo/issues/labels/:label/delete', VerifyToken, (req, res) => {
 	
 });
 

@@ -17,11 +17,13 @@ var repoSchema = new Schema({
 	description: String,
 	location: String,
 	dir: String,
+	createdOn: {type: Date, default: new Date()},
 	public: Boolean,
 	issuesEnabled: {type: Boolean, default: true},
 	issues: [{type: Schema.Types.ObjectId, ref: 'Issue'}],
 	issueLabels: [{type: Schema.Types.ObjectId, ref: 'IssueLabel'}],
 	permissions: [{type: Schema.Types.ObjectId, ref: 'Permission'}],
+	starredBy: [{type: Schema.Types.ObjectId, ref: 'User'}],
 });
 
 /*
@@ -107,6 +109,21 @@ repoSchema.methods.getFiles = function(root, callback){
 	});
 }
 
+repoSchema.methods.getFileContent = function(branch, path, callback){
+	console.log(config.storagedir, this.dir);
+	let git = require('simple-git')([config.storagedir, this.dir].join('/'));
+	console.log(path);
+	if(path.startsWith('/'))
+		path = path.substr(1, path.length - 1);
+	git.raw(['show', [branch, ':', path].join('')], (err, out) => {
+		if(!err){
+			callback(err, out);
+		}else{
+			callback(new Error('cannot load content'));
+		}
+	});
+}
+
 repoSchema.methods.getCommitsCount = function(callback){
 	let git = require('simple-git')(path.join(config.storagedir, this.dir));
 	git.raw(['rev-list', '--all', '--count'], (err, out) => {
@@ -121,10 +138,10 @@ repoSchema.methods.getCommitsCount = function(callback){
 
 repoSchema.methods.hasPermission = function(token, callback){
 	jwt.verify(token, config.apisecret, (err, decoded) => {
-		if(err){
+		if(err && !this.public){
 			callback(false);
 		}else if(this.public || decoded.userId == this.owner){
-			callback(true, decoded.userId);
+			callback(true, decoded == undefined ? null : decoded.userId);
 		}else{
 			// TODO: check other permissions
 			callback(false);
@@ -199,16 +216,25 @@ repoSchema.statics.findByName = function(username, reponame, callback){
 
 repoSchema.statics.findExact = function(user, repo, populate){
 	if(populate == undefined)
-		populate = {};
-	return User
-		.findOne({
-			username: user
-		})
-		.populate({
-			path: 'repos',
-			match: {name: repo},
-			populate: populate
-		});
+		return User
+			.findOne({
+				username: user
+			})
+			.populate({
+				path: 'repos',
+				match: {name: repo}
+			});
+	else
+		return User
+			.findOne({
+				username: user
+			})
+			.populate({
+				path: 'repos',
+				match: {name: repo},
+				populate: populate
+			});
+
 }
 
 repoSchema.statics.existsCheck = function(user){

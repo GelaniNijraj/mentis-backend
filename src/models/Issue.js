@@ -11,6 +11,8 @@ var issueSchema = new Schema({
 	replies: [{type: Schema.Types.ObjectId, ref: 'IssueReply'}],
 	labels: [{type: Schema.Types.ObjectId, ref: 'IssueLabel'}],
 	participants: [{type: Schema.Types.ObjectId, ref: 'User'}],
+	postedOn: {type: Date, default: new Date()},
+	open: {type: Boolean, default: true},
 	title: {
 		type: String,
 		required: [true, 'name is required'],
