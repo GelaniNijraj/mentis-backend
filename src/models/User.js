@@ -23,6 +23,15 @@ var userSchema = new Schema({
 		required: [true, 'password is required'],
 		minlength: [8, 'minimum password length is 8 characters']
 	},
+	about: {
+		type: String,
+		maxlength: 255,
+		default: ''
+	},
+	profilepic: {
+		type: String,
+		default: null
+	},
 	repos: [{type: Schema.Types.ObjectId, ref: 'Repo'}],
 	stars: [{type: Schema.Types.ObjectId, ref: 'Repo'}]
 });
@@ -47,6 +56,13 @@ userSchema.methods.register = function(cb){
 				});
 			}
 		});
+}
+
+userSchema.statics.validatePassword = function(password){
+	if(password.trim().length >= 8)
+		return true;
+	else
+		return false;
 }
 
 userSchema.statics.matches = function(username, password, callback){

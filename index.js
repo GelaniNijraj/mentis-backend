@@ -21,8 +21,19 @@ app.use(function(req, res, next) {
   next();
 });
 
+// exception
+let unless = function(path, middleware) {
+    return function(req, res, next) {
+        if (req.path.search(path) != -1) {
+            return next();
+        } else {
+            return middleware(req, res, next);
+        }
+    };
+};
+
 // parsing params from body
-app.use(bodyParser.json()); // for parsing application/json
+app.use(unless('settings/profilepic', bodyParser.json())); // for parsing application/json
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // loading routes
@@ -31,18 +42,14 @@ app.get('/api', (req, res) => res.send('Mentis API'));
 // authenticating remote cloning
 app.get('/auth_git', (req, res) => {
 	// TODO: check if repo is public. If yes, then skip auth.
-	console.log("authenticating");
-	console.log(req.headers);
-	// console.log(req);
-	// res.status(200).json({success: true});
-
-		// res.status(401).json({success: false});
 	if(req.headers.authorization != undefined){
 		var authHeader = req.headers.authorization;
 		authHeader = authHeader.substr(authHeader.search(' ') + 1, authHeader.length); // stripping 'Basic '
 		var decoded = Buffer.from(authHeader, 'base64').toString().split(':');
 		var username = decoded[0], password = decoded[1];
-		User.matches(username, password, (matches) => res.status(matches ? 200 : 401).json({success: false}));
+		User.matches(username, password, (matches) => {
+			res.status(matches ? 200 : 401).json({success: false})
+		});
 	}else{
 		res.status(401).json({success: false});
 	}

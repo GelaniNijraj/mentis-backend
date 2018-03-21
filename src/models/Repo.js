@@ -24,6 +24,7 @@ var repoSchema = new Schema({
 	issueLabels: [{type: Schema.Types.ObjectId, ref: 'IssueLabel'}],
 	permissions: [{type: Schema.Types.ObjectId, ref: 'Permission'}],
 	starredBy: [{type: Schema.Types.ObjectId, ref: 'User'}],
+	contributors: [{type: Schema.Types.ObjectId, ref: 'User'}]
 });
 
 /*
@@ -151,8 +152,29 @@ repoSchema.methods.hasPermission = function(token, callback){
 
 // callback(err)
 repoSchema.methods.rename = function(newname, callback){
-	repo.name = newname;
-	repo.save();
+	let newdir = path.join(this.dir.split('/')[0], newname + '.git');
+	let olddir = this.dir;
+	let oldname = this.name;
+	let newpath = path.join(config.storagedir, newdir);
+	let oldpath = path.join(config.storagedir, olddir);
+	this.dir = newdir;
+	this.name = newname;
+	this.save((err, raw) => {
+		if(err){
+			callback(err);
+		}else{
+			fs.rename(oldpath, newpath, (err) => {
+				if(err){
+					// revert
+					this.dir = olddir;
+					this.name = oldname;
+					this.save((err) => callback(err));
+				}else{
+					callback(null);
+				}
+			});
+		}
+	})
 }
 
 // callback(err)

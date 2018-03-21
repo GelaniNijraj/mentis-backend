@@ -104,14 +104,44 @@ repoRoutes.get('/:user/:repo/files/content', (req, res) => {
 		});
 });
 
+repoRoutes.post('/:user/:repo/rename', VerifyToken, (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(Repo.existsCheck(user)){
+				let repo = user.repos[0];
+				repo.hasPermission(req.query.token, (has) => {
+					if(has && repo.owner.toString() == req.decoded.userId){
+						repo.rename(req.body.name, (err) => {
+							if(!err)
+								res.json({success: true});
+							else
+								res.json({success: false});
+						});
+					}else{
+						res.status(401).json({success: false});
+					}
+				})
+			}
+		});
+});
+
 repoRoutes.get('/repos/search/:query', (req, res) => {
 	Repo
 		.find({
 			name: {$regex: req.params.query, $options: 'i'},
 			public: true
 		})
+		.select('-_id name description')
+		.populate({
+			path: 'owner',
+			select: '-_id username'
+		})
 		.exec((err, repos) => {
-			res.json({success: true, repos: repos});
+			res.json({success: true, repos: repos.map(e => {
+				e.location = [e.owner.username, e.name].join('/');
+				return e;
+			})});
 		});
 });
 
@@ -130,6 +160,8 @@ repoRoutes.get('/:user/:repo/info', (req, res) => {
 							description: repo.description, 
 							url: repo.location, 
 							name: repo.name,
+							issuesEnabled: repo.issuesEnabled,
+							public: repo.public,
 							starred: repo.starredBy.some(e => e.toString() == userId),
 							isOwner: repo.owner.toString() == userId
 						});
@@ -178,7 +210,6 @@ repoRoutes.post('/all', VerifyToken, (req, res) => {
 			select: '-_id username'
 		})
 		.exec((err, repos) => {
-			console.log(repos);
 			if(repos)
 				res.json({success: true, data: repos});
 		});
@@ -340,6 +371,128 @@ repoRoutes.post('/delete', VerifyToken, (req, res) => {
 		});
 });
 
+// contributors
+
+repoRoutes.get('/:user/:repo/contributors', VerifyToken, (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo, {
+			path: 'contributors',
+			select: '-_id username' 
+		})
+		.exec((err, user) => {
+			if(!Repo.existsCheck(user)){
+				res.status(404).json({success: false});
+			}else if(user.repos[0].owner.toString() != req.decoded.userId){
+				res.stars(401).json({success: false});
+			}else{
+				let repo = user.repos[0];
+				res.json({success: true, contributors: repo.contributors});
+			}
+		});
+});
+
+repoRoutes.post('/:user/:repo/contributors/add/:contributor', VerifyToken, (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(!Repo.existsCheck(user)){
+				res.status(404).json({success: false});
+			}else if(user.repos[0].owner.toString() != req.decoded.userId){
+				res.stars(401).json({success: false});
+			}else{
+				let repo = user.repos[0];
+				User
+					.findOne({
+						username: req.params.contributor
+					}, (err, cont) => {
+						if(!err && cont){
+							let exists = repo.contributors.some((e) => e == cont._id.toString());
+							if(!exists){
+								repo.contributors.push(cont._id);
+								repo.save((err) => {
+									if(!err)
+										res.json({success: true});
+									else
+										res.json({success: false});
+								});
+							}else{
+								res.json({success: false, message: 'already exists'});
+							}
+						}else{
+							res.json({success: false, message: 'user not found'});
+						}
+					});
+			}
+		});
+});
+
+
+repoRoutes.post('/:user/:repo/contributors/remove/:contributor', VerifyToken, (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo, {
+			path: 'contributors'
+		})
+		.exec((err, user) => {
+			if(!Repo.existsCheck(user)){
+				res.status(404).json({success: false});
+			}else if(user.repos[0].owner.toString() != req.decoded.userId){
+				res.stars(401).json({success: false});
+			}else{
+				let repo = user.repos[0];
+				User
+					.findOne({
+						username: req.params.contributor
+					}, (err, cont) => {
+						if(!err && cont){
+							let exists = repo.contributors.some((e) => e == cont._id.toString());
+							if(!exists){
+								repo.contributors.pull(cont._id);
+								repo.save((err) => {
+									if(!err)
+										res.json({success: true});
+									else
+										res.json({success: false});
+								});
+							}else{
+								res.json({success: false, message: 'does not exist'});
+							}
+						}else{
+							res.json({success: false, message: 'user not found'});
+						}
+					});
+			}
+		});
+});
+
+repoRoutes.post('/:user/:repo/contributors', VerifyToken, (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(!Repo.existsCheck(user)){
+				res.status(404).json({success: false});
+			}else if(user.repos[0].owner.toString() != req.decoded.userId){
+				res.stars(401).json({success: false});
+			}else{
+				let repo = user.repos[0];
+				User
+					.findOne({
+						username: req.paramas.contributor
+					}, (err, cont) => {
+						if(!err && user){
+							repo.contributors.push(cont._id);
+							repo.save((err) => {
+								if(!err)
+									res.json({success: true});
+								else
+									res.json({success: false});
+							});
+						}else{
+							res.json({success: false, message: 'user not found'});
+						}
+					});
+			}
+		});
+});
 
 
 export default repoRoutes;
