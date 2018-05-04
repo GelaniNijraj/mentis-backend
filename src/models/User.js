@@ -69,10 +69,13 @@ userSchema.statics.matches = function(username, password, callback){
 	User.findOne({
 		username: username
 	}, (err, user) => {
-		if(err) callback(false);
-		bcrypt.compare(password, user.password, (err, matches) => {
-			callback(matches);
-		});
+		if(err) {
+			callback(false);
+		}else if(user != null){
+			bcrypt.compare(password, user.password, (err, matches) => {
+				callback(matches);
+			});
+		}
 	});
 }
 

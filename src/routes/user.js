@@ -160,7 +160,6 @@ userRoutes.post('/:user/settings', VerifyToken, (req, res) => {
 });
 
 userRoutes.post('/:user/settings/profilepic', [upload.single('profilepic'), VerifyToken], (req, res) => {
-	console.log(req.file);
 	User
 		.findOne({
 			_id: req.decoded.userId
@@ -229,11 +228,12 @@ userRoutes.get('/:user/profile/pic', (req, res) => {
 			if(!err){
 				if(user.profilepic != null){
 					let image = path.join(uploadPath, user.profilepic);
-					console.log(mime.getType(image));
 					res.header('Content-type', mime.getType(image));
 					res.sendFile(image);
 				}else{
-					res.status(404).json({success: false});
+					let image = path.join(uploadPath, 'default.png');
+					res.header('Content-type', mime.getType(image));
+					res.sendFile(image);
 				}
 			}else{
 				res.status(404).json({success: false});

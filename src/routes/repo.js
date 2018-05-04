@@ -199,6 +199,31 @@ repoRoutes.get('/:user/:repo/commits/count', (req, res) => {
 		});
 });
 
+
+repoRoutes.get('/:user/:repo/branches/count', (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			if(Repo.existsCheck(user)){
+				let repo = user.repos[0];
+				repo.hasPermission(req.query.token, (has) => {
+					if(has){
+						repo.getBranchCount((err, count) => {
+							if(!err)
+								res.json({success: true, count: count});
+							else
+								res.json({success: false});
+						});
+					}else{
+						res.status(401).json({success: false});
+					}
+				});
+			}else{
+				res.status(404).json({success: false});
+			}
+		});
+});
+
 repoRoutes.post('/all', VerifyToken, (req, res) => {
 	var userId = req.decoded.userId;
 	Repo
@@ -212,6 +237,55 @@ repoRoutes.post('/all', VerifyToken, (req, res) => {
 		.exec((err, repos) => {
 			if(repos)
 				res.json({success: true, data: repos});
+		});
+});
+
+repoRoutes.post('/:user/:repo/clone', [VerifyToken], (req, res) => {
+	Repo
+		.findExact(req.params.user, req.params.repo)
+		.exec((err, user) => {
+			User.findOne({
+				_id: req.decoded.userId
+			}, (err, u) => {
+				if(!err){
+					if(Repo.existsCheck(user)){
+						let repo = user.repos[0];
+
+						var repoName = req.body.name;
+						var repoFolder = repoName + '.git';
+						var repoDir = path.join(u.username, repoFolder);
+						var repoURL = req.app.get('httproot') + 'git/' + u.username + '/' + repoFolder;
+
+						var newrepo = new Repo({
+							name: repoName,
+							owner: req.decoded.userId,
+							dir: repoDir,
+							createdOn: new Date(),
+							description: req.body.description,
+							location: repoURL,
+							public: true
+						});
+
+						repo.clone(newrepo, (err, r) => {
+							if(!err){
+								u.repos.push(r._id);
+								u.save((err) => {
+									if(!err)
+										res.json({success: true});
+									else
+										res.json({success: false});
+								})
+							}else{
+								res.json({success: false});
+							}
+						});
+					}else{
+						res.status(404).json({success: false});
+					}
+				}else{
+					res.json({success: false});
+				}
+			});
 		});
 });
 
@@ -304,6 +378,7 @@ repoRoutes.post('/:user/:repo/unstar', VerifyToken, (req, res) => {
 
 repoRoutes.get('/:user/repos/all', (req, res) => {
 	User.getId(req.query.token, (id) => {
+		console.log(id, req.params.user);
 		User
 			.findOne({
 				username: req.params.user
@@ -316,6 +391,7 @@ repoRoutes.get('/:user/repos/all', (req, res) => {
 				}
 			})
 			.exec((err, user) => {
+				console.log(user.repos.length);
 				if(user != undefined){
 					if(id == user._id.toString())
 						res.json({success: true, repos: user.repos});

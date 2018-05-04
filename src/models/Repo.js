@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import validator from 'validator';
 import jwt from 'jsonwebtoken';
 import rimraf from 'rimraf';
+import ncp from 'ncp';
 
 import config from './../../config';
 import User from './User';
@@ -133,6 +134,46 @@ repoSchema.methods.getCommitsCount = function(callback){
 			callback(err, out);
 		}else{
 			callback(new Error('couldn\'t get count'));
+		}
+	});
+}
+
+repoSchema.methods.getBranchCount = function(callback){
+	let git = require('simple-git')(path.join(config.storagedir, this.dir));
+	git.raw(['branch'], (err, out) => {
+		if(out != null){
+			out = out.split('\n').length - 1;
+			if(out == -1)
+				out = 0;
+			if(!err){
+				callback(err, out);
+			}else{
+				callback(new Error('couldn\'t get count'));
+			}
+		}else{
+			callback(null, 0);
+		}
+	});
+}
+
+repoSchema.methods.clone = function(repo, cb){
+	ncp.ncp(path.join(config.storagedir, this.dir), path.join(config.storagedir, repo.dir), (err) => {
+		if(!err){
+			let repoDir = path.join(config.storagedir, repo.dir);
+			walk.walk(repoDir, (baseDir, file, stat, next) => {
+				fs.chmod(path.join(baseDir, file), '777', next);
+			}, (err) => {
+				if(err){
+					callback(err);
+				}else{
+					fs.chmodSync(repoDir, '777');
+					repo.save((err, r) => {
+						cb(null, r);
+					});
+				}
+			});
+		}else{
+			cb(err);
 		}
 	});
 }
